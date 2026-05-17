@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>意图驱动跨域网络自治系统</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>意图驱动跨域网络自治系统</h1>
+        <p>多智能体协同 · MCP 工具接口 · A2A 消息流 · 闭环自愈</p>
+      </div>
+      <div class="status-pill" id="statusPill">等待意图</div>
+    </header>
+
+    <main class="layout">
+      <section class="workspace">
+        <div class="intent-panel">
+          <textarea id="intentInput">请保障北京园区到上海云服务的视频会议业务，要求时延低于50ms，丢包率低于1%，优先避开拥塞链路。</textarea>
+          <div class="toolbar">
+            <button id="submitIntent">提交意图</button>
+            <button id="simulateCongestion">模拟拥塞</button>
+            <button id="simulateFailure">模拟故障</button>
+            <button id="recoverLink">恢复链路</button>
+            <button id="healIntent">触发闭环自愈</button>
+          </div>
+        </div>
+
+        <section class="section">
+          <div class="section-title">
+            <h2>跨域拓扑</h2>
+            <span id="selectedPath">未选择路径</span>
+          </div>
+          <div class="topology" id="topology"></div>
+        </section>
+
+        <section class="grid two">
+          <div class="section">
+            <div class="section-title"><h2>结构化意图</h2></div>
+            <pre id="intentJson">暂无数据</pre>
+          </div>
+          <div class="section">
+            <div class="section-title"><h2>验证结果</h2></div>
+            <div id="verification" class="metrics"></div>
+          </div>
+        </section>
+
+        <section class="grid two">
+          <div class="section">
+            <div class="section-title"><h2>任务流</h2></div>
+            <div id="tasks" class="timeline"></div>
+          </div>
+          <div class="section">
+            <div class="section-title"><h2>A2A 消息</h2></div>
+            <div id="messages" class="message-list"></div>
+          </div>
+        </section>
+      </section>
+
+      <aside class="side">
+        <section class="section">
+          <div class="section-title"><h2>智能体注册表</h2></div>
+          <div id="agents" class="agent-list"></div>
+        </section>
+        <section class="section">
+          <div class="section-title"><h2>网络策略</h2></div>
+          <div id="policy" class="policy">暂无策略</div>
+        </section>
+        <section class="section">
+          <div class="section-title"><h2>遥测状态</h2></div>
+          <div id="telemetry" class="telemetry"></div>
+        </section>
+      </aside>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
