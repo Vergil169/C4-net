@@ -5,7 +5,9 @@ from app.agents import AgentRegistry, Orchestrator
 from app.models import BusinessIntent
 from app.settings import LLMSettingsUpdate, llm_settings_status, save_llm_settings, settings_path
 from app.simulator import NetworkSimulator
+from app.tools import NetworkToolKit
 from app.utils import load_active_result, persist_runtime_state, recent_intents
+from app.llm import load_deepseek_runtime_settings, normalize_deepseek_base_url
 
 
 DEMO_INTENT = "请保障北京园区到上海云服务的视频会议业务，要求时延低于50ms，丢包率低于1%，优先避开拥塞链路。"
@@ -106,6 +108,18 @@ def test_settings_status_does_not_expose_api_key(monkeypatch, tmp_path):
     assert llm_settings_status().configured
 
 
+def test_deepseek_env_key_has_priority(monkeypatch, tmp_path):
+    monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
+    save_llm_settings(LLMSettingsUpdate(api_key="settings-key", base_url="https://api.deepseek.com/chat/completions"))
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "env-key")
+
+    settings = load_deepseek_runtime_settings()
+
+    assert settings.api_key == "env-key"
+    assert settings.base_url == "https://api.deepseek.com"
+    assert normalize_deepseek_base_url("https://api.deepseek.com/chat/completions") == "https://api.deepseek.com"
+
+
 def test_default_settings_path_uses_user_config_dir(monkeypatch, tmp_path):
     monkeypatch.delenv("C4_SETTINGS_DIR", raising=False)
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
@@ -141,6 +155,27 @@ def test_policy_reports_insufficient_bandwidth(monkeypatch, tmp_path):
     assert not verification.passed
     assert verification.status == "failed"
     assert any("Insufficient path bandwidth" in issue for issue in verification.issues)
+
+
+def test_langchain_tools_return_valid_json(monkeypatch, tmp_path):
+    monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    simulator = NetworkSimulator()
+    tools = {item.name: item for item in NetworkToolKit(simulator).create_tools()}
+
+    intent = tools["parse_business_intent"].invoke({"text": DEMO_INTENT})
+    topology = tools["query_network_topology"].invoke({})
+    telemetry = tools["collect_telemetry_snapshot"].invoke({})
+    path = tools["plan_candidate_path"].invoke({"intent": intent})
+    policy = tools["generate_network_policy"].invoke({"intent": intent})
+    verification = tools["verify_sla_compliance"].invoke({"intent": intent, "policy": policy})
+
+    assert BusinessIntent.model_validate(intent).service == "视频会议"
+    assert topology["nodes"] and topology["links"]
+    assert telemetry
+    assert path["selected_links"]
+    assert policy["selected_links"]
+    assert verification["status"] in {"achieved", "partial", "failed"}
 
 
 def test_simulator_state_is_restored_after_restart(monkeypatch, tmp_path):

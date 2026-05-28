@@ -53,6 +53,21 @@ def test_intents_api_returns_orchestration_result(monkeypatch, tmp_path):
     assert "messages" in payload
 
 
+def test_agent_intents_api_returns_orchestration_result(monkeypatch, tmp_path):
+    monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    client = TestClient(app)
+
+    response = client.post("/api/agent/intents", json={"text": DEMO_INTENT})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["intent_id"].startswith("INT-")
+    assert payload["intent"]["raw_text"] == DEMO_INTENT
+    assert payload["policy"]["selected_links"]
+    assert "verification" in payload
+
+
 def test_heal_api_returns_orchestration_result(monkeypatch, tmp_path):
     monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)

@@ -7,6 +7,7 @@ const nodePositions = {
 };
 
 let currentState = null;
+let deepSeekPromptShown = false;
 
 const els = {
   agents: document.querySelector("#agents"),
@@ -209,6 +210,15 @@ async function loadSettings() {
   els.baseUrl.value = settings.base_url;
   els.timeoutSeconds.value = settings.timeout;
   els.settingsStatus.textContent = settings.configured ? "DeepSeek API Key 已配置" : "DeepSeek API Key 未配置";
+  if (!settings.configured && !deepSeekPromptShown && !localStorage.getItem("deepseekPromptDismissed")) {
+    deepSeekPromptShown = true;
+    const openDialog = window.confirm("当前未配置 DeepSeek API Key。是否现在接入？取消后系统会继续使用本地演示降级。");
+    if (openDialog) {
+      els.settingsDialog.showModal();
+    } else {
+      localStorage.setItem("deepseekPromptDismissed", "1");
+    }
+  }
 }
 
 async function saveSettings() {
