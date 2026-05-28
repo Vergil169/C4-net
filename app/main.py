@@ -7,7 +7,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from .agents import AgentRegistry, Orchestrator
+from .agent import ReactOrchestrator
+from .agents import AgentRegistry
 from .models import OrchestrationResult, SimulationRequest, SimulationResult, StateResponse
 from .settings import LLMSettingsStatus, LLMSettingsUpdate, LLMTestResult, llm_settings_status, save_llm_settings, test_llm_connection
 from .simulator import NetworkSimulator
@@ -25,7 +26,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 registry = AgentRegistry()
 simulator = NetworkSimulator()
-orchestrator = Orchestrator(simulator=simulator, registry=registry)
+orchestrator = ReactOrchestrator(simulator=simulator, registry=registry)
 
 
 @app.get("/")
@@ -77,6 +78,11 @@ def get_state() -> StateResponse:
 
 @app.post("/api/intents", response_model=OrchestrationResult)
 def submit_intent(request: IntentRequest) -> OrchestrationResult:
+    return orchestrator.submit_intent(request.text)
+
+
+@app.post("/api/agent/intents", response_model=OrchestrationResult)
+def submit_agent_intent(request: IntentRequest) -> OrchestrationResult:
     return orchestrator.submit_intent(request.text)
 
 
