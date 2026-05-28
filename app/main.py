@@ -12,6 +12,7 @@ from .agents import AgentRegistry
 from .models import OrchestrationResult, SimulationRequest, SimulationResult, StateResponse
 from .settings import LLMSettingsStatus, LLMSettingsUpdate, LLMTestResult, llm_settings_status, save_llm_settings, test_llm_connection
 from .simulator import NetworkSimulator
+from .utils import recent_intents
 
 
 class IntentRequest(BaseModel):
@@ -73,6 +74,7 @@ def get_state() -> StateResponse:
         links=links,
         telemetry=simulator.telemetry(),
         active_result=orchestrator.active_result,
+        recent_intents=recent_intents(),
     )
 
 

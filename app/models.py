@@ -138,3 +138,4 @@ class StateResponse(BaseModel):
     links: list[Link]
     telemetry: list[TelemetrySnapshot]
     active_result: OrchestrationResult | None = None
+    recent_intents: list[dict[str, Any]] = Field(default_factory=list)

@@ -10,6 +10,7 @@ from .llm import create_deepseek_chat_model
 from .models import A2AMessage, OrchestrationResult, TaskStep
 from .simulator import NetworkSimulator
 from .tools import NetworkToolContext, NetworkToolKit
+from .utils import load_active_result, persist_runtime_state
 
 
 SYSTEM_PROMPT = """你是意图驱动网络自治系统智能体。
@@ -26,7 +27,8 @@ class ReactOrchestrator:
         self.registry = registry
         self.planner_agent = PlannerAgent()
         self.fallback = Orchestrator(simulator=simulator, registry=registry)
-        self.active_result: OrchestrationResult | None = None
+        self.active_result: OrchestrationResult | None = load_active_result()
+        self.fallback.active_result = self.active_result
 
     def submit_intent(self, text: str) -> OrchestrationResult:
         return self._run(text=text, healing=False)
@@ -70,6 +72,7 @@ class ReactOrchestrator:
 
         self.active_result = result
         self.fallback.active_result = result
+        persist_runtime_state(self.simulator, result)
         return result
 
     def _result_from_context(

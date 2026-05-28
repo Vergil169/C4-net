@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .models import BusinessIntent, Link, NetworkPolicy, Node, SimulationAction, TelemetrySnapshot, VerificationResult
+from .utils import persist_runtime_state, restore_simulator_state
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,7 @@ class NetworkSimulator:
                 links=["lnk-beijing-tianjin", "lnk-tianjin-guangzhou", "lnk-guangzhou-shanghai"],
             ),
         ]
+        restore_simulator_state(self)
 
     def topology(self) -> tuple[list[Node], list[Link]]:
         return self.nodes, list(self.links.values())
@@ -116,6 +118,7 @@ class NetworkSimulator:
             link.utilization_percent = baseline.utilization_percent
             link.latency_ms = baseline.latency_ms
             link.loss_percent = baseline.loss_percent
+        persist_runtime_state(self)
         return link
 
     def generate_policy(self, intent: BusinessIntent, avoid_degraded: bool = True) -> NetworkPolicy:

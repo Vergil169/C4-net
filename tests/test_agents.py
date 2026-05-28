@@ -5,6 +5,7 @@ from app.agents import AgentRegistry, Orchestrator
 from app.models import BusinessIntent
 from app.settings import LLMSettingsUpdate, llm_settings_status, save_llm_settings, settings_path
 from app.simulator import NetworkSimulator
+from app.utils import load_active_result, persist_runtime_state, recent_intents
 
 
 DEMO_INTENT = "请保障北京园区到上海云服务的视频会议业务，要求时延低于50ms，丢包率低于1%，优先避开拥塞链路。"
@@ -140,3 +141,30 @@ def test_policy_reports_insufficient_bandwidth(monkeypatch, tmp_path):
     assert not verification.passed
     assert verification.status == "failed"
     assert any("Insufficient path bandwidth" in issue for issue in verification.issues)
+
+
+def test_simulator_state_is_restored_after_restart(monkeypatch, tmp_path):
+    monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
+    simulator = NetworkSimulator()
+    simulator.apply_simulation("congest", "lnk-tianjin-jinan")
+
+    restarted = NetworkSimulator()
+
+    assert restarted.links["lnk-tianjin-jinan"].health == "congested"
+    assert restarted.links["lnk-tianjin-jinan"].utilization_percent == 94
+
+
+def test_recent_intents_keep_latest_ten(monkeypatch, tmp_path):
+    monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    simulator = NetworkSimulator()
+    orchestrator = Orchestrator(simulator=simulator, registry=AgentRegistry())
+
+    for index in range(12):
+        result = orchestrator.submit_intent(f"北京园区到上海云服务的视频会议业务 {index}，时延低于50ms，丢包率低于1%。")
+        persist_runtime_state(simulator, result)
+
+    history = recent_intents()
+    assert len(history) == 10
+    assert history[0]["raw_text"].startswith("北京园区到上海云服务的视频会议业务 11")
+    assert load_active_result() is not None
