@@ -10,3 +10,4 @@ pyinstaller==6.11.1
 # LangChain/LangGraph implementations.
 langchain>=0.3.0
 langgraph>=0.2.0
+langchain-openai>=1.0.0
