@@ -257,9 +257,18 @@ class Orchestrator:
         bus.send("Planner Agent", "Telemetry Agent", "request", {"tool": "mcp.telemetry.snapshot"})
         bus.send("Telemetry Agent", "Policy Agent", "inform", {"snapshots": [item.model_dump() for item in telemetry]})
 
-        policy = self.simulator.generate_policy(intent, avoid_degraded=True)
+        if healing:
+            policy, verification, healing_attempts = self.simulator.heal_policy(intent)
+        else:
+            policy = self.simulator.generate_policy(intent, avoid_degraded=True)
+            verification = self.simulator.verify(intent, policy)
+            healing_attempts = 0
         bus.send("Policy Agent", "Verification Agent", "request", {"policy_id": policy.policy_id, "path": policy.path})
-        verification = self.simulator.verify(intent, policy)
+        if healing:
+            bus.send("Healing Agent", "Verification Agent", "inform", {"attempts": healing_attempts, "passed": verification.passed})
+            tasks[-1].status = "done" if verification.passed else "blocked"
+            if not verification.passed:
+                tasks[-1].detail = f"已重试 {healing_attempts} 次，仍无可行路径"
         bus.send("Verification Agent", "GUI", "inform", verification.model_dump())
 
         result = OrchestrationResult(
@@ -271,7 +280,7 @@ class Orchestrator:
             telemetry=telemetry,
             policy=policy,
             verification=verification,
-            status=verification.status if not healing or verification.passed else "healing",
+            status=verification.status,
             healed=healing and verification.passed,
         )
         self.active_result = result

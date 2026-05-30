@@ -42,6 +42,7 @@ def test_healing_avoids_degraded_primary_link(monkeypatch, tmp_path):
     assert result.healed
     assert "lnk-tianjin-jinan" not in result.policy.selected_links
     assert result.verification.passed
+    assert "lnk-tianjin-nanjing" in result.policy.selected_links
 
 
 def test_failure_is_reported_when_no_path_can_satisfy_sla(monkeypatch, tmp_path):
@@ -51,12 +52,31 @@ def test_failure_is_reported_when_no_path_can_satisfy_sla(monkeypatch, tmp_path)
     orchestrator = Orchestrator(simulator=simulator, registry=AgentRegistry())
     simulator.apply_simulation("fail", "lnk-tianjin-jinan")
     simulator.apply_simulation("fail", "lnk-tianjin-guangzhou")
+    simulator.apply_simulation("fail", "lnk-tianjin-nanjing")
 
     result = orchestrator.submit_intent(DEMO_INTENT)
 
     assert not result.verification.passed
     assert result.status == "failed"
     assert any("No feasible candidate path" in issue for issue in result.verification.issues)
+
+
+def test_healing_reports_failed_after_max_retries(monkeypatch, tmp_path):
+    monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    simulator = NetworkSimulator()
+    orchestrator = Orchestrator(simulator=simulator, registry=AgentRegistry())
+    orchestrator.submit_intent(DEMO_INTENT)
+    simulator.apply_simulation("fail", "lnk-tianjin-jinan")
+    simulator.apply_simulation("fail", "lnk-tianjin-guangzhou")
+    simulator.apply_simulation("fail", "lnk-tianjin-nanjing")
+
+    result = orchestrator.heal()
+
+    assert not result.healed
+    assert result.status == "failed"
+    assert result.tasks[-1].status == "blocked"
+    assert any("retried 3 times" in issue for issue in result.verification.issues)
 
 
 def test_deepseek_parser_is_used_when_configured(monkeypatch, tmp_path):

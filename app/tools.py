@@ -42,6 +42,7 @@ class NetworkToolContext:
         self.policy: NetworkPolicy | None = None
         self.verification: VerificationResult | None = None
         self.healing_reason: str | None = None
+        self.healing_attempts: int = 0
 
 
 class NetworkToolKit:
@@ -168,15 +169,16 @@ class NetworkToolKit:
             parsed_intent = _resolve_intent(context, intent)
             candidate = simulator._select_path(parsed_intent, avoid_degraded=True)
             path_plan = _path_payload(simulator, candidate)
-            policy = simulator.generate_policy(parsed_intent, avoid_degraded=True)
-            verification = simulator.verify(parsed_intent, policy)
+            policy, verification, attempts = simulator.heal_policy(parsed_intent)
             context.intent = parsed_intent
             context.path_plan = path_plan
             context.policy = policy
             context.verification = verification
             context.healing_reason = reason
+            context.healing_attempts = attempts
             return {
                 "reason": reason,
+                "attempts": attempts,
                 "path_plan": path_plan,
                 "policy": policy.model_dump(mode="json"),
                 "verification": verification.model_dump(mode="json"),

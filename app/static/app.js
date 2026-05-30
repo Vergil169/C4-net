@@ -4,6 +4,7 @@ const nodePositions = {
   "jinan-core": [56, 28],
   "shanghai-cloud": [78, 45],
   "guangzhou-dr": [48, 70],
+  "nanjing-edge": [61, 60],
 };
 
 let currentState = null;
@@ -280,11 +281,12 @@ async function refresh() {
   renderState(await api("/api/state"));
 }
 
-async function runAction(label, action) {
+async function runAction(label, action, successLabel = "操作完成") {
   try {
     setBusy(true, label);
     await action();
     await refresh();
+    els.statusPill.textContent = successLabel;
   } catch (error) {
     els.statusPill.textContent = "操作失败";
     els.parseNote.textContent = error.message;
@@ -314,21 +316,21 @@ els.simulateCongestion.addEventListener("click", async () => {
   await runAction("模拟拥塞中", () => api("/api/simulate", {
     method: "POST",
     body: JSON.stringify({ action: "congest", link_id: "lnk-tianjin-jinan" }),
-  }));
+  }), "已模拟拥塞");
 });
 
 els.simulateFailure.addEventListener("click", async () => {
   await runAction("模拟故障中", () => api("/api/simulate", {
     method: "POST",
     body: JSON.stringify({ action: "fail", link_id: "lnk-tianjin-jinan" }),
-  }));
+  }), "已模拟故障");
 });
 
 els.recoverLink.addEventListener("click", async () => {
   await runAction("恢复链路中", () => api("/api/simulate", {
     method: "POST",
     body: JSON.stringify({ action: "recover", link_id: "lnk-tianjin-jinan" }),
-  }));
+  }), "链路已恢复");
 });
 
 els.healIntent.addEventListener("click", async () => {

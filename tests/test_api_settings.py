@@ -85,6 +85,20 @@ def test_heal_api_returns_orchestration_result(monkeypatch, tmp_path):
     assert "verification" in payload
 
 
+def test_recover_link_api_restores_normal_telemetry(monkeypatch, tmp_path):
+    monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
+    client = TestClient(app)
+    client.post("/api/simulate", json={"action": "fail", "link_id": "lnk-tianjin-jinan"})
+
+    response = client.post("/api/simulate", json={"action": "recover", "link_id": "lnk-tianjin-jinan"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["link"]["health"] == "normal"
+    assert payload["link"]["latency_ms"] == 18
+    assert payload["link"]["loss_percent"] == 0.2
+
+
 def test_simulate_unknown_link_returns_404(monkeypatch, tmp_path):
     monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
     client = TestClient(app)

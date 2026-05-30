@@ -114,7 +114,7 @@ class ReactOrchestrator:
 
         nodes, links = self.simulator.topology()
         telemetry = self.simulator.telemetry()
-        tasks = self._tasks(healing)
+        tasks = self._tasks(healing, context.verification, context.healing_attempts)
         messages = self._messages(text, context, graph_backend, healing)
         verification = context.verification
         return OrchestrationResult(
@@ -126,7 +126,7 @@ class ReactOrchestrator:
             telemetry=telemetry,
             policy=context.policy,
             verification=verification,
-            status=verification.status if not healing or verification.passed else "healing",
+            status=verification.status,
             healed=healing and verification.passed,
         )
 
@@ -136,10 +136,14 @@ class ReactOrchestrator:
         result.intent.parse_note = f"{note} ReAct 智能体不可用，已保留演示降级。原因：{exc}"
         return result
 
-    def _tasks(self, healing: bool) -> list[TaskStep]:
+    def _tasks(self, healing: bool, verification: Any | None = None, healing_attempts: int = 0) -> list[TaskStep]:
         tasks = self.planner_agent.build_tasks()
         if healing:
-            tasks.append(TaskStep(id="T6", agent="Healing Agent", action="replan", status="done", detail="根据异常遥测避开退化链路并重规划"))
+            passed = bool(verification and verification.passed)
+            detail = "根据异常遥测避开退化链路并重规划"
+            if verification is not None and not passed:
+                detail = f"已重试 {healing_attempts} 次，仍无可行路径"
+            tasks.append(TaskStep(id="T6", agent="Healing Agent", action="replan", status="done" if passed else "blocked", detail=detail))
         return tasks
 
     def _messages(self, text: str, context: NetworkToolContext, graph_backend: str, healing: bool) -> list[A2AMessage]:
@@ -156,6 +160,7 @@ class ReactOrchestrator:
             bus.send("Policy Tool", "Verification Tool", "request", {"policy_id": context.policy.policy_id, "path": context.policy.path})
         if healing:
             bus.send("Telemetry Tool", "Healing Tool", "alert", {"reason": context.healing_reason or "SLA violation or degraded link detected"})
+            bus.send("Healing Tool", "Verification Tool", "inform", {"attempts": context.healing_attempts, "passed": bool(context.verification and context.verification.passed)})
         if context.verification is not None:
             bus.send("Verification Tool", "GUI", "inform", context.verification.model_dump(mode="json"))
         return bus.messages
