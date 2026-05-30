@@ -25,6 +25,8 @@ def test_submit_intent_generates_policy_and_passes_sla(monkeypatch, tmp_path):
     assert result.intent.max_latency_ms == 50
     assert result.intent.parse_source == "rule_fallback"
     assert result.policy.selected_links
+    assert "lnk-tianjin-jinan" in result.policy.selected_links
+    assert "lnk-tianjin-nanjing" not in result.policy.selected_links
     assert result.verification.passed
     assert result.status == "achieved"
 

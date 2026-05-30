@@ -23,7 +23,7 @@ class NetworkSimulator:
             Node(id="jinan-core", label="济南骨干", domain="华东骨干域", kind="backbone"),
             Node(id="shanghai-cloud", label="上海云服务", domain="华东云域", kind="cloud"),
             Node(id="guangzhou-dr", label="广州灾备", domain="华南灾备域", kind="dr"),
-            Node(id="nanjing-edge", label="Nanjing Edge", domain="Low Latency Backup", kind="edge"),
+            Node(id="nanjing-edge", label="南京边缘", domain="低时延备份域", kind="edge"),
         ]
         self.links: dict[str, Link] = {
             "lnk-beijing-tianjin": Link(
@@ -80,7 +80,7 @@ class NetworkSimulator:
                 id="lnk-tianjin-nanjing",
                 source="tianjin-core",
                 target="nanjing-edge",
-                domain="Low Latency Backup",
+                domain="低时延备份域",
                 latency_ms=12,
                 loss_percent=0.1,
                 capacity_mbps=900,
@@ -90,7 +90,7 @@ class NetworkSimulator:
                 id="lnk-nanjing-shanghai",
                 source="nanjing-edge",
                 target="shanghai-cloud",
-                domain="Low Latency Backup",
+                domain="低时延备份域",
                 latency_ms=10,
                 loss_percent=0.1,
                 capacity_mbps=900,
@@ -231,6 +231,10 @@ class NetworkSimulator:
         return policy, verification, attempts
 
     def _select_path(self, intent: BusinessIntent, avoid_degraded: bool) -> CandidatePath:
+        primary_path = self.candidate_paths[0]
+        if avoid_degraded and self._path_is_feasible(primary_path, intent):
+            return primary_path
+
         scored: list[tuple[int, CandidatePath]] = []
         for candidate in self.candidate_paths:
             links = [self.links[link_id] for link_id in candidate.links]
@@ -275,7 +279,7 @@ class NetworkSimulator:
             "lnk-jinan-shanghai": Link(id=link_id, source="jinan-core", target="shanghai-cloud", domain="华东云域", latency_ms=15, loss_percent=0.2, capacity_mbps=1000, utilization_percent=42),
             "lnk-tianjin-guangzhou": Link(id=link_id, source="tianjin-core", target="guangzhou-dr", domain="南向备份域", latency_ms=20, loss_percent=0.3, capacity_mbps=600, utilization_percent=35),
             "lnk-guangzhou-shanghai": Link(id=link_id, source="guangzhou-dr", target="shanghai-cloud", domain="华南云互联", latency_ms=17, loss_percent=0.2, capacity_mbps=700, utilization_percent=33),
-            "lnk-tianjin-nanjing": Link(id=link_id, source="tianjin-core", target="nanjing-edge", domain="Low Latency Backup", latency_ms=12, loss_percent=0.1, capacity_mbps=900, utilization_percent=28),
-            "lnk-nanjing-shanghai": Link(id=link_id, source="nanjing-edge", target="shanghai-cloud", domain="Low Latency Backup", latency_ms=10, loss_percent=0.1, capacity_mbps=900, utilization_percent=31),
+            "lnk-tianjin-nanjing": Link(id=link_id, source="tianjin-core", target="nanjing-edge", domain="低时延备份域", latency_ms=12, loss_percent=0.1, capacity_mbps=900, utilization_percent=28),
+            "lnk-nanjing-shanghai": Link(id=link_id, source="nanjing-edge", target="shanghai-cloud", domain="低时延备份域", latency_ms=10, loss_percent=0.1, capacity_mbps=900, utilization_percent=31),
         }
         return baseline[link_id]
