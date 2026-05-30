@@ -7,8 +7,68 @@ const nodePositions = {
   "nanjing-edge": [61, 60],
 };
 
+const promptExamples = [
+  {
+    category: "realtime",
+    tags: ["实时协同", "关键业务"],
+    title: "保障视频会议体验",
+    description: "适用于高管会议、跨园区协作、云会议质量保障。",
+    text: "北京园区到上海云服务的视频会议业务，需要低时延路径，50ms 内，丢包小于1%，带宽至少100M，优先避开拥塞链路。",
+  },
+  {
+    category: "realtime",
+    tags: ["实时协同", "语音"],
+    title: "保障语音客服质量",
+    description: "适用于 VoIP/SIP、呼叫中心和语音专线体验优化。",
+    text: "华北接入域到华东云域的语音客服业务需要稳定低抖动，丢包不超过0.5%，优先选择低时延链路，链路异常时自动切换。",
+  },
+  {
+    category: "finance",
+    tags: ["金融交易", "关键业务"],
+    title: "核心交易专线保障",
+    description: "适用于支付、订单、核心交易等高优先级业务。",
+    text: "北京园区到上海云服务的核心交易专线需要安全优先，必须强隔离并拒绝异常流量，时延控制在30ms内，丢包低于0.2%，带宽500M。",
+  },
+  {
+    category: "dr",
+    tags: ["灾备与备份", "高优先级"],
+    title: "夜间灾备同步",
+    description: "适用于备份窗口、跨域数据同步和灾备链路保障。",
+    text: "北京园区夜间向广州灾备域同步备份数据，需要大带宽和故障避让，带宽至少800M，不要求特别低时延，但要避开故障链路。",
+  },
+  {
+    category: "healing",
+    tags: ["故障自愈", "拥塞避让"],
+    title: "拥塞后自动绕行",
+    description: "适用于主路径拥塞或故障后的自动切线演示。",
+    text: "北京园区到上海云服务的关键业务在主链路拥塞或故障时，系统后台自动判断并切换到北京-济南-上海低时延备用专线，无需人工操作。",
+  },
+  {
+    category: "security",
+    tags: ["安全合规", "隔离"],
+    title: "敏感业务隔离",
+    description: "适用于敏感流量隔离、异常流量拒绝和合规保障。",
+    text: "北京园区到上海云服务的敏感业务需要安全合规优先，隔离普通业务流量，拒绝异常流量，丢包低于1%，带宽200M。",
+  },
+  {
+    category: "capacity",
+    tags: ["容量优化", "扩容"],
+    title: "临时带宽扩容",
+    description: "适用于活动保障、突发流量和临时容量提升。",
+    text: "北京园区到上海云服务临时需要带宽扩容，保障业务带宽不少于1000M，优先选择低利用率链路，避免影响实时业务。",
+  },
+  {
+    category: "ops",
+    tags: ["运维巡检", "健康检查"],
+    title: "跨域链路健康巡检",
+    description: "适用于例行巡检、链路健康验证和风险发现。",
+    text: "请对北京园区到上海云服务的跨域链路做健康巡检，检查时延、丢包、利用率和故障状态，发现拥塞后给出绕行策略。",
+  },
+];
+
 let currentState = null;
 let deepSeekPromptShown = false;
+let lastSimulatedLinkId = null;
 
 const els = {
   agents: document.querySelector("#agents"),
@@ -24,7 +84,11 @@ const els = {
   messages: document.querySelector("#messages"),
   modelName: document.querySelector("#modelName"),
   openSettings: document.querySelector("#openSettings"),
+  optimizeIntent: document.querySelector("#optimizeIntent"),
   parseNote: document.querySelector("#parseNote"),
+  promptFilter: document.querySelector("#promptFilter"),
+  promptLibrary: document.querySelector("#promptLibrary"),
+  promptSearch: document.querySelector("#promptSearch"),
   parseSource: document.querySelector("#parseSource"),
   parserBadge: document.querySelector("#parserBadge"),
   policy: document.querySelector("#policy"),
@@ -73,6 +137,40 @@ function renderState(state) {
   if (state.active_result) {
     renderResult(state.active_result);
   }
+}
+
+function renderPromptLibrary() {
+  const filter = els.promptFilter.value;
+  const keyword = els.promptSearch.value.trim().toLowerCase();
+  const examples = promptExamples.filter((item) => {
+    const inCategory = filter === "all" || item.category === filter;
+    const haystack = `${item.title} ${item.description} ${item.tags.join(" ")} ${item.text}`.toLowerCase();
+    return inCategory && (!keyword || haystack.includes(keyword));
+  });
+  els.promptLibrary.innerHTML = examples
+    .map((item, index) => `
+      <article class="prompt-card">
+        <div class="prompt-tags">${item.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>
+        <strong>${escapeHtml(item.title)}</strong>
+        <p>${escapeHtml(item.description)}</p>
+        <div class="prompt-actions">
+          <button class="ghost" data-prompt-index="${index}" data-prompt-action="fill">填入</button>
+          <button data-prompt-index="${index}" data-prompt-action="submit">直接提交</button>
+        </div>
+      </article>
+    `)
+    .join("") || `<div class="prompt-card"><strong>没有匹配结果</strong><p>换个关键词试试，例如“交易”“灾备”“拥塞”。</p></div>`;
+
+  els.promptLibrary.querySelectorAll("[data-prompt-action]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const item = examples[Number(button.dataset.promptIndex)];
+      els.intentInput.value = item.text;
+      els.intentInput.focus();
+      if (button.dataset.promptAction === "submit") {
+        await submitCurrentIntent();
+      }
+    });
+  });
 }
 
 function renderResult(result) {
@@ -194,11 +292,14 @@ function renderTopology(nodes, links, selectedLinks) {
       const length = Math.hypot(x2 - x1, y2 - y1);
       const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
       const selected = selectedLinks.includes(link.id) ? "selected" : "";
+      const normalizedType = link.link_type === "dedicated" ? "low_latency_dedicated" : link.link_type;
+      const typeClass = normalizedType || "backbone";
       const labelX = (x1 + x2) / 2;
       const labelY = (y1 + y2) / 2;
+      const typeLabel = normalizedType === "low_latency_dedicated" ? "低时延专线" : "骨干中转";
       return `
-        <div class="link ${selected} ${link.health}" style="left:${x1}px; top:${y1}px; width:${length}px; transform:rotate(${angle}deg)"></div>
-        <div class="link-label" style="left:${labelX}px; top:${labelY}px">${link.latency_ms}ms / ${link.loss_percent}%</div>
+        <div class="link ${typeClass} ${selected} ${link.health}" style="left:${x1}px; top:${y1}px; width:${length}px; transform:rotate(${angle}deg)"></div>
+        <div class="link-label" style="left:${labelX}px; top:${labelY}px">${link.latency_ms}ms / ${link.loss_percent}% <span class="link-type">${typeLabel}</span></div>
       `;
     })
     .join("");
@@ -295,7 +396,27 @@ async function runAction(label, action, successLabel = "操作完成") {
   }
 }
 
-els.submitIntent.addEventListener("click", async () => {
+function linkExists(linkId) {
+  return Boolean((currentState?.active_result?.links || currentState?.links || []).some((link) => link.id === linkId));
+}
+
+function selectSimulationLink({ preferDegraded = false } = {}) {
+  const links = currentState?.active_result?.links || currentState?.links || [];
+  if (!links.length) {
+    throw new Error("当前拓扑还未加载，请稍后再试。");
+  }
+  if (preferDegraded) {
+    const degraded = links.find((link) => link.health !== "normal");
+    if (degraded) return degraded.id;
+    if (lastSimulatedLinkId && linkExists(lastSimulatedLinkId)) return lastSimulatedLinkId;
+  }
+  const selectedLinks = currentState?.active_result?.policy?.selected_links || [];
+  const selected = selectedLinks.find((linkId) => linkExists(linkId));
+  if (selected) return selected;
+  return links[0].id;
+}
+
+async function submitCurrentIntent() {
   try {
     setBusy(true, "解析中");
     const result = await api("/api/intents", {
@@ -310,27 +431,60 @@ els.submitIntent.addEventListener("click", async () => {
   } finally {
     setBusy(false);
   }
+}
+
+els.submitIntent.addEventListener("click", submitCurrentIntent);
+
+els.optimizeIntent.addEventListener("click", async () => {
+  try {
+    setBusy(true, "优化输入中");
+    const result = await api("/api/intents/optimize", {
+      method: "POST",
+      body: JSON.stringify({ text: els.intentInput.value }),
+    });
+    els.intentInput.value = result.optimized_text;
+    els.parseNote.textContent = result.note;
+    els.parserBadge.textContent = result.source === "deepseek" ? "DeepSeek 优化" : "本地优化";
+    els.parserBadge.className = `parser-badge ${result.source === "deepseek" ? "ai" : "fallback"}`;
+    els.statusPill.textContent = "输入已优化";
+  } catch (error) {
+    els.statusPill.textContent = "优化失败";
+    els.parseNote.textContent = error.message;
+  } finally {
+    setBusy(false);
+  }
 });
 
 els.simulateCongestion.addEventListener("click", async () => {
-  await runAction("模拟拥塞中", () => api("/api/simulate", {
-    method: "POST",
-    body: JSON.stringify({ action: "congest", link_id: "lnk-tianjin-jinan" }),
-  }), "已模拟拥塞");
+  await runAction("模拟拥塞中", () => {
+    const linkId = selectSimulationLink();
+    lastSimulatedLinkId = linkId;
+    return api("/api/simulate", {
+      method: "POST",
+      body: JSON.stringify({ action: "congest", link_id: linkId }),
+    });
+  }, "已模拟拥塞并自动切线");
 });
 
 els.simulateFailure.addEventListener("click", async () => {
-  await runAction("模拟故障中", () => api("/api/simulate", {
-    method: "POST",
-    body: JSON.stringify({ action: "fail", link_id: "lnk-tianjin-jinan" }),
-  }), "已模拟故障");
+  await runAction("模拟故障中", () => {
+    const linkId = selectSimulationLink();
+    lastSimulatedLinkId = linkId;
+    return api("/api/simulate", {
+      method: "POST",
+      body: JSON.stringify({ action: "fail", link_id: linkId }),
+    });
+  }, "已模拟故障并自动切线");
 });
 
 els.recoverLink.addEventListener("click", async () => {
-  await runAction("恢复链路中", () => api("/api/simulate", {
-    method: "POST",
-    body: JSON.stringify({ action: "recover", link_id: "lnk-tianjin-jinan" }),
-  }), "链路已恢复");
+  await runAction("恢复链路中", () => {
+    const linkId = selectSimulationLink({ preferDegraded: true });
+    return api("/api/simulate", {
+      method: "POST",
+      body: JSON.stringify({ action: "recover", link_id: linkId }),
+    });
+  }, "链路已恢复");
 });
 
 els.healIntent.addEventListener("click", async () => {
@@ -379,6 +533,9 @@ document.querySelectorAll("[data-example]").forEach((button) => {
   });
 });
 
+els.promptFilter.addEventListener("change", renderPromptLibrary);
+els.promptSearch.addEventListener("input", renderPromptLibrary);
+
 window.addEventListener("resize", () => {
   if (currentState) {
     renderTopology(
@@ -392,4 +549,5 @@ window.addEventListener("resize", () => {
 loadSettings().catch(() => {
   els.settingsStatus.textContent = "配置状态读取失败";
 });
+renderPromptLibrary();
 refresh();

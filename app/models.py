@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 IntentStatus = Literal["pending", "achieved", "partial", "conflict", "failed", "healing"]
 LinkHealth = Literal["normal", "congested", "failed"]
+LinkType = Literal["backbone", "low_latency_dedicated"]
 SimulationAction = Literal["congest", "fail", "recover"]
 
 
@@ -63,6 +64,7 @@ class Link(BaseModel):
     source: str
     target: str
     domain: str
+    link_type: LinkType = "backbone"
     latency_ms: int
     loss_percent: float
     capacity_mbps: int

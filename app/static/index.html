@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>意图驱动跨域网络自治系统</title>
-    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260531-1" />
   </head>
   <body>
     <header class="topbar">
@@ -29,6 +29,28 @@
             <div class="parser-badge" id="parserBadge">本地规则待命</div>
           </div>
           <textarea id="intentInput" spellcheck="false" aria-label="业务意图输入">北京园区到上海云服务的视频会议业务，需要低时延路径，50ms 内，丢包小于1%，带宽至少100M，优先避开拥塞链路。</textarea>
+          <div class="prompt-panel">
+            <div class="prompt-head">
+              <div>
+                <h3>常见问题提示词</h3>
+                <p>按业务场景快速填入高质量意图，支持关键词检索。</p>
+              </div>
+              <div class="prompt-tools">
+                <select id="promptFilter" aria-label="提示词场景筛选">
+                  <option value="all">全部场景</option>
+                  <option value="realtime">实时协同</option>
+                  <option value="finance">金融交易</option>
+                  <option value="dr">灾备与备份</option>
+                  <option value="healing">故障自愈</option>
+                  <option value="security">安全合规</option>
+                  <option value="capacity">容量优化</option>
+                  <option value="ops">运维巡检</option>
+                </select>
+                <input id="promptSearch" type="search" placeholder="搜索：交易、灾备、拥塞..." />
+              </div>
+            </div>
+            <div id="promptLibrary" class="prompt-library"></div>
+          </div>
           <div class="examples" aria-label="输入参考">
             <button class="ghost" data-example="北京园区到上海云服务的核心交易专线要低时延、强隔离，30ms 内，丢包不超过0.2%，带宽500M，按最高优先级保障。">输入参考：核心交易</button>
             <button class="ghost" data-example="华北接入域到华东云域的语音业务质量不稳定，请保障 VoIP/SIP 流量，尽量低抖动，丢包别超过0.5%。">输入参考：语音低抖动</button>
@@ -36,6 +58,7 @@
           </div>
           <div class="toolbar">
             <button id="submitIntent">提交意图</button>
+            <button id="optimizeIntent">优化输入</button>
             <button id="simulateCongestion">模拟拥塞</button>
             <button id="simulateFailure">模拟故障</button>
             <button id="recoverLink">恢复链路</button>
@@ -145,6 +168,6 @@
       </form>
     </dialog>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=20260531-1"></script>
   </body>
 </html>

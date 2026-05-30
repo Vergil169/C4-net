@@ -44,7 +44,7 @@ def test_healing_avoids_degraded_primary_link(monkeypatch, tmp_path):
     assert result.healed
     assert "lnk-tianjin-jinan" not in result.policy.selected_links
     assert result.verification.passed
-    assert "lnk-tianjin-nanjing" in result.policy.selected_links
+    assert "lnk-beijing-jinan-dedicated" in result.policy.selected_links
 
 
 def test_failure_is_reported_when_no_path_can_satisfy_sla(monkeypatch, tmp_path):
@@ -53,6 +53,7 @@ def test_failure_is_reported_when_no_path_can_satisfy_sla(monkeypatch, tmp_path)
     simulator = NetworkSimulator()
     orchestrator = Orchestrator(simulator=simulator, registry=AgentRegistry())
     simulator.apply_simulation("fail", "lnk-tianjin-jinan")
+    simulator.apply_simulation("fail", "lnk-beijing-jinan-dedicated")
     simulator.apply_simulation("fail", "lnk-tianjin-guangzhou")
     simulator.apply_simulation("fail", "lnk-tianjin-nanjing")
 
@@ -70,6 +71,7 @@ def test_healing_reports_failed_after_max_retries(monkeypatch, tmp_path):
     orchestrator = Orchestrator(simulator=simulator, registry=AgentRegistry())
     orchestrator.submit_intent(DEMO_INTENT)
     simulator.apply_simulation("fail", "lnk-tianjin-jinan")
+    simulator.apply_simulation("fail", "lnk-beijing-jinan-dedicated")
     simulator.apply_simulation("fail", "lnk-tianjin-guangzhou")
     simulator.apply_simulation("fail", "lnk-tianjin-nanjing")
 

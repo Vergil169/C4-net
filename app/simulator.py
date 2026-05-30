@@ -46,11 +46,23 @@ class NetworkSimulator:
                 capacity_mbps=800,
                 utilization_percent=46,
             ),
+            "lnk-beijing-jinan-dedicated": Link(
+                id="lnk-beijing-jinan-dedicated",
+                source="beijing-campus",
+                target="jinan-core",
+                domain="低时延专线域",
+                link_type="low_latency_dedicated",
+                latency_ms=12,
+                loss_percent=0.05,
+                capacity_mbps=1200,
+                utilization_percent=24,
+            ),
             "lnk-jinan-shanghai": Link(
                 id="lnk-jinan-shanghai",
                 source="jinan-core",
                 target="shanghai-cloud",
                 domain="华东云域",
+                link_type="low_latency_dedicated",
                 latency_ms=15,
                 loss_percent=0.2,
                 capacity_mbps=1000,
@@ -101,6 +113,10 @@ class NetworkSimulator:
             CandidatePath(
                 nodes=["beijing-campus", "tianjin-core", "jinan-core", "shanghai-cloud"],
                 links=["lnk-beijing-tianjin", "lnk-tianjin-jinan", "lnk-jinan-shanghai"],
+            ),
+            CandidatePath(
+                nodes=["beijing-campus", "jinan-core", "shanghai-cloud"],
+                links=["lnk-beijing-jinan-dedicated", "lnk-jinan-shanghai"],
             ),
             CandidatePath(
                 nodes=["beijing-campus", "tianjin-core", "guangzhou-dr", "shanghai-cloud"],
@@ -165,6 +181,7 @@ class NetworkSimulator:
             f"policy id auto intent service {intent.service}",
             f"qos class {qos_class} reserve {intent.min_bandwidth_mbps}mbps",
             f"route intent-path {'/'.join(path.nodes)}",
+            f"route selected-links {','.join(path.links)}",
             "telemetry verify latency loss utilization interval 5s",
         ]
         return NetworkPolicy(
@@ -276,7 +293,8 @@ class NetworkSimulator:
         baseline = {
             "lnk-beijing-tianjin": Link(id=link_id, source="beijing-campus", target="tianjin-core", domain="华北接入域", latency_ms=8, loss_percent=0.1, capacity_mbps=1000, utilization_percent=38),
             "lnk-tianjin-jinan": Link(id=link_id, source="tianjin-core", target="jinan-core", domain="跨域骨干", latency_ms=18, loss_percent=0.2, capacity_mbps=800, utilization_percent=46),
-            "lnk-jinan-shanghai": Link(id=link_id, source="jinan-core", target="shanghai-cloud", domain="华东云域", latency_ms=15, loss_percent=0.2, capacity_mbps=1000, utilization_percent=42),
+            "lnk-beijing-jinan-dedicated": Link(id=link_id, source="beijing-campus", target="jinan-core", domain="低时延专线域", link_type="low_latency_dedicated", latency_ms=12, loss_percent=0.05, capacity_mbps=1200, utilization_percent=24),
+            "lnk-jinan-shanghai": Link(id=link_id, source="jinan-core", target="shanghai-cloud", domain="华东云域", link_type="low_latency_dedicated", latency_ms=15, loss_percent=0.2, capacity_mbps=1000, utilization_percent=42),
             "lnk-tianjin-guangzhou": Link(id=link_id, source="tianjin-core", target="guangzhou-dr", domain="南向备份域", latency_ms=20, loss_percent=0.3, capacity_mbps=600, utilization_percent=35),
             "lnk-guangzhou-shanghai": Link(id=link_id, source="guangzhou-dr", target="shanghai-cloud", domain="华南云互联", latency_ms=17, loss_percent=0.2, capacity_mbps=700, utilization_percent=33),
             "lnk-tianjin-nanjing": Link(id=link_id, source="tianjin-core", target="nanjing-edge", domain="低时延备份域", latency_ms=12, loss_percent=0.1, capacity_mbps=900, utilization_percent=28),

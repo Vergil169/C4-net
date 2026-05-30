@@ -82,7 +82,39 @@ def test_heal_api_returns_orchestration_result(monkeypatch, tmp_path):
     assert payload["intent_id"].startswith("INT-")
     assert payload["healed"] is True
     assert "lnk-tianjin-jinan" not in payload["policy"]["selected_links"]
+    assert "lnk-beijing-jinan-dedicated" in payload["policy"]["selected_links"]
     assert "verification" in payload
+
+
+def test_simulate_degraded_active_link_auto_heals(monkeypatch, tmp_path):
+    monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    client = TestClient(app)
+    client.post("/api/simulate", json={"action": "recover", "link_id": "lnk-tianjin-jinan"})
+    client.post("/api/simulate", json={"action": "recover", "link_id": "lnk-beijing-jinan-dedicated"})
+    client.post("/api/intents", json={"text": DEMO_INTENT})
+
+    simulate_response = client.post("/api/simulate", json={"action": "congest", "link_id": "lnk-tianjin-jinan"})
+    state_response = client.get("/api/state")
+
+    assert simulate_response.status_code == 200
+    active_result = state_response.json()["active_result"]
+    assert active_result["healed"] is True
+    assert "lnk-tianjin-jinan" not in active_result["policy"]["selected_links"]
+    assert "lnk-beijing-jinan-dedicated" in active_result["policy"]["selected_links"]
+
+
+def test_optimize_intent_prompt_uses_fallback_when_deepseek_is_not_configured(monkeypatch, tmp_path):
+    monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    client = TestClient(app)
+
+    response = client.post("/api/intents/optimize", json={"text": "北京到上海视频会议，50ms，100M"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "rule_fallback"
+    assert "备用专线" in payload["optimized_text"]
 
 
 def test_recover_link_api_restores_normal_telemetry(monkeypatch, tmp_path):
