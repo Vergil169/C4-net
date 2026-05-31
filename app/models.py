@@ -58,6 +58,15 @@ class TaskStep(BaseModel):
     detail: str
 
 
+class HealingTraceStep(BaseModel):
+    stage: int
+    name: str
+    status: Literal["pending", "running", "done", "blocked"] = "done"
+    detail: str
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    links: list[str] = Field(default_factory=list)
+
+
 class Link(BaseModel):
     id: str
     source: str
@@ -105,6 +114,8 @@ class VerificationResult(BaseModel):
     bottleneck_utilization_percent: int
     issues: list[str] = Field(default_factory=list)
     recommendation: str
+    severity: Literal["normal", "warning", "critical"] = "normal"
+    sla_margin: dict[str, float] = Field(default_factory=dict)
 
 
 class OrchestrationResult(BaseModel):
@@ -119,6 +130,7 @@ class OrchestrationResult(BaseModel):
     verification: VerificationResult
     status: IntentStatus
     healed: bool = False
+    healing_trace: list[HealingTraceStep] = Field(default_factory=list)
 
 
 class SimulationRequest(BaseModel):
@@ -130,6 +142,8 @@ class SimulationResult(BaseModel):
     action: SimulationAction
     link: Link
     telemetry: list[TelemetrySnapshot]
+    healing_triggered: bool = False
+    active_result: OrchestrationResult | None = None
 
 
 class StateResponse(BaseModel):
