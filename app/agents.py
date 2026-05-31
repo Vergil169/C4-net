@@ -257,12 +257,26 @@ class Orchestrator:
         bus.send("Planner Agent", "Telemetry Agent", "request", {"tool": "mcp.telemetry.snapshot"})
         bus.send("Telemetry Agent", "Policy Agent", "inform", {"snapshots": [item.model_dump() for item in telemetry]})
 
+        healing_trace = []
         if healing:
+            original_policy = self.active_result.policy if self.active_result is not None else self.simulator.generate_policy(intent, avoid_degraded=True)
+            original_verification = self.active_result.verification if self.active_result is not None else self.simulator.verify(intent, original_policy)
             policy, verification, healing_attempts = self.simulator.heal_policy(intent)
+            healing_trace = self.simulator.build_healing_trace(intent, original_policy, original_verification, policy, verification, healing_attempts)
         else:
-            policy = self.simulator.generate_policy(intent, avoid_degraded=True)
-            verification = self.simulator.verify(intent, policy)
-            healing_attempts = 0
+            original_policy = self.simulator.generate_policy(intent, avoid_degraded=True)
+            original_verification = self.simulator.verify(intent, original_policy)
+            if original_verification.passed:
+                policy = original_policy
+                verification = original_verification
+                healing_attempts = 0
+            else:
+                bus.send("Verification Agent", "Healing Agent", "alert", {"reason": original_verification.issues, "latency_ms": original_verification.latency_ms})
+                tasks.append(TaskStep(id="T6", agent="Healing Agent", action="auto_replan", status="running", detail="检测到 SLA 不达标，自动触发闭环自愈"))
+                policy, verification, healing_attempts = self.simulator.heal_policy(intent)
+                healing_trace = self.simulator.build_healing_trace(intent, original_policy, original_verification, policy, verification, healing_attempts)
+                tasks[-1].status = "done" if verification.passed else "blocked"
+                tasks[-1].detail = "已自动避开高时延链路，切换至低时延专线" if verification.passed else f"已重试 {healing_attempts} 次，仍无可行路径"
         bus.send("Policy Agent", "Verification Agent", "request", {"policy_id": policy.policy_id, "path": policy.path})
         if healing:
             bus.send("Healing Agent", "Verification Agent", "inform", {"attempts": healing_attempts, "passed": verification.passed})
@@ -281,7 +295,8 @@ class Orchestrator:
             policy=policy,
             verification=verification,
             status=verification.status,
-            healed=healing and verification.passed,
+            healed=(healing or bool(healing_trace)) and verification.passed,
+            healing_trace=healing_trace,
         )
         self.active_result = result
         return result

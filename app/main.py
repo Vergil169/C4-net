@@ -133,10 +133,20 @@ def simulate(request: SimulationRequest) -> SimulationResult:
     if request.link_id not in simulator.links:
         raise HTTPException(status_code=404, detail="Unknown link_id")
     link = simulator.apply_simulation(request.action, request.link_id)
-    active_links = set(orchestrator.active_result.policy.selected_links) if orchestrator.active_result else set()
-    if request.action in {"congest", "fail"} and request.link_id in active_links:
-        orchestrator.heal()
-    return SimulationResult(action=request.action, link=link, telemetry=simulator.telemetry())
+    active_result = orchestrator.active_result
+    healing_triggered = False
+    if active_result is not None:
+        current_verification = simulator.verify(active_result.intent, active_result.policy)
+        if not current_verification.passed:
+            active_result = orchestrator.heal()
+            healing_triggered = True
+    return SimulationResult(
+        action=request.action,
+        link=link,
+        telemetry=simulator.telemetry(),
+        healing_triggered=healing_triggered,
+        active_result=active_result,
+    )
 
 
 @app.post("/api/heal", response_model=OrchestrationResult)

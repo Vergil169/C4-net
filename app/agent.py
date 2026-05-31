@@ -109,13 +109,40 @@ class ReactOrchestrator:
             )
 
         assert context.intent is not None
-        assert context.policy is not None
-        assert context.verification is not None
 
         nodes, links = self.simulator.topology()
         telemetry = self.simulator.telemetry()
-        tasks = self._tasks(healing, context.verification, context.healing_attempts)
-        messages = self._messages(text, context, graph_backend, healing)
+        healing_trace = []
+        auto_healing = False
+        if healing:
+            base_result = self.active_result
+            original_policy = base_result.policy if base_result is not None else self.simulator.generate_policy(context.intent, avoid_degraded=True)
+            original_verification = base_result.verification if base_result is not None else self.simulator.verify(context.intent, original_policy)
+            healed_policy, healed_verification, attempts = self.simulator.heal_policy(context.intent)
+            context.policy = healed_policy
+            context.verification = healed_verification
+            context.healing_attempts = attempts
+            healing_trace = self.simulator.build_healing_trace(context.intent, original_policy, original_verification, healed_policy, healed_verification, attempts)
+        else:
+            original_policy = self.simulator.generate_policy(context.intent, avoid_degraded=True)
+            original_verification = self.simulator.verify(context.intent, original_policy)
+            if original_verification.passed:
+                context.policy = original_policy
+                context.verification = original_verification
+            else:
+                context.policy = original_policy
+                context.verification = original_verification
+                original_policy = context.policy
+                original_verification = context.verification
+                healed_policy, healed_verification, attempts = self.simulator.heal_policy(context.intent)
+                context.policy = healed_policy
+                context.verification = healed_verification
+                context.healing_attempts = attempts
+                healing_trace = self.simulator.build_healing_trace(context.intent, original_policy, original_verification, healed_policy, healed_verification, attempts)
+                auto_healing = True
+
+        tasks = self._tasks(healing or auto_healing, context.verification, context.healing_attempts)
+        messages = self._messages(text, context, graph_backend, healing or auto_healing)
         verification = context.verification
         return OrchestrationResult(
             intent=context.intent,
@@ -127,7 +154,8 @@ class ReactOrchestrator:
             policy=context.policy,
             verification=verification,
             status=verification.status,
-            healed=healing and verification.passed,
+            healed=(healing or auto_healing) and verification.passed,
+            healing_trace=healing_trace,
         )
 
     def _fallback_result(self, text: str, healing: bool, exc: Exception) -> OrchestrationResult:

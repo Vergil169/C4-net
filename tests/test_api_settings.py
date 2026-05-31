@@ -3,6 +3,9 @@ from fastapi.testclient import TestClient
 from app.main import STATIC_DIR, app
 
 
+STRICT_VIDEO_INTENT = "请保障北京园区到上海云服务的视频会议业务，需要低时延链路，30ms 内，丢包小于1%，带宽至少100M。"
+
+
 DEMO_INTENT = "北京园区到上海云服务的视频会议业务，需要低时延路径，50ms 内，丢包小于1%，带宽至少100M，优先避开拥塞链路。"
 
 
@@ -53,6 +56,22 @@ def test_intents_api_returns_orchestration_result(monkeypatch, tmp_path):
     assert "messages" in payload
 
 
+def test_intents_api_auto_heals_strict_video_sla(monkeypatch, tmp_path):
+    monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    client = TestClient(app)
+
+    response = client.post("/api/intents", json={"text": STRICT_VIDEO_INTENT})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "achieved"
+    assert payload["healed"] is True
+    assert payload["policy"]["selected_links"] == ["lnk-beijing-shanghai-private"]
+    assert payload["verification"]["latency_ms"] == 25
+    assert len(payload["healing_trace"]) == 6
+
+
 def test_agent_intents_api_returns_orchestration_result(monkeypatch, tmp_path):
     monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
@@ -82,7 +101,7 @@ def test_heal_api_returns_orchestration_result(monkeypatch, tmp_path):
     assert payload["intent_id"].startswith("INT-")
     assert payload["healed"] is True
     assert "lnk-tianjin-jinan" not in payload["policy"]["selected_links"]
-    assert "lnk-beijing-jinan-dedicated" in payload["policy"]["selected_links"]
+    assert "lnk-beijing-shanghai-private" in payload["policy"]["selected_links"]
     assert "verification" in payload
 
 
@@ -91,7 +110,7 @@ def test_simulate_degraded_active_link_auto_heals(monkeypatch, tmp_path):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     client = TestClient(app)
     client.post("/api/simulate", json={"action": "recover", "link_id": "lnk-tianjin-jinan"})
-    client.post("/api/simulate", json={"action": "recover", "link_id": "lnk-beijing-jinan-dedicated"})
+    client.post("/api/simulate", json={"action": "recover", "link_id": "lnk-beijing-shanghai-private"})
     client.post("/api/intents", json={"text": DEMO_INTENT})
 
     simulate_response = client.post("/api/simulate", json={"action": "congest", "link_id": "lnk-tianjin-jinan"})
@@ -101,7 +120,7 @@ def test_simulate_degraded_active_link_auto_heals(monkeypatch, tmp_path):
     active_result = state_response.json()["active_result"]
     assert active_result["healed"] is True
     assert "lnk-tianjin-jinan" not in active_result["policy"]["selected_links"]
-    assert "lnk-beijing-jinan-dedicated" in active_result["policy"]["selected_links"]
+    assert "lnk-beijing-shanghai-private" in active_result["policy"]["selected_links"]
 
 
 def test_optimize_intent_prompt_uses_fallback_when_deepseek_is_not_configured(monkeypatch, tmp_path):

@@ -437,6 +437,93 @@ pre {
   white-space: nowrap;
 }
 
+.healing-alert {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fafc;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.healing-alert.ok {
+  border-color: rgba(15, 159, 110, 0.38);
+  background: rgba(15, 159, 110, 0.08);
+  color: #0b7d58;
+}
+
+.healing-alert.warn {
+  border-color: rgba(183, 121, 31, 0.42);
+  background: rgba(183, 121, 31, 0.08);
+  color: #90540f;
+}
+
+.healing-alert.bad {
+  border-color: rgba(194, 65, 53, 0.42);
+  background: rgba(194, 65, 53, 0.08);
+  color: var(--red);
+}
+
+.healing-trace {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.healing-step {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 112px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.healing-step b {
+  display: flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--blue);
+  color: white;
+}
+
+.healing-step.blocked b {
+  background: var(--red);
+}
+
+.healing-step strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.healing-step p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.healing-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.healing-meta span {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: #eef2f7;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .agent-list,
 .timeline,
 .message-list,
@@ -594,7 +681,8 @@ dialog::backdrop {
 @media (max-width: 1080px) {
   .layout,
   .grid.two,
-  .summary-grid {
+  .summary-grid,
+  .healing-trace {
     grid-template-columns: 1fr;
   }
 

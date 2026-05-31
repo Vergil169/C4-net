@@ -78,6 +78,9 @@ const els = {
   closeSettings: document.querySelector("#closeSettings"),
   confidence: document.querySelector("#confidence"),
   healIntent: document.querySelector("#healIntent"),
+  healingAlert: document.querySelector("#healingAlert"),
+  healingSummary: document.querySelector("#healingSummary"),
+  healingTrace: document.querySelector("#healingTrace"),
   intentInput: document.querySelector("#intentInput"),
   intentJson: document.querySelector("#intentJson"),
   latencySla: document.querySelector("#latencySla"),
@@ -136,6 +139,8 @@ function renderState(state) {
   renderTelemetry(state.telemetry);
   if (state.active_result) {
     renderResult(state.active_result);
+  } else {
+    renderHealingTrace([]);
   }
 }
 
@@ -181,8 +186,48 @@ function renderResult(result) {
   renderMessages(result.messages);
   renderPolicy(result.policy);
   renderVerification(result.verification);
+  renderHealingTrace(result.healing_trace || [], result);
   renderTopology(result.nodes, result.links, result.policy.selected_links);
   els.selectedPath.textContent = result.policy.path.join(" -> ");
+}
+
+function renderHealingTrace(trace, result = null) {
+  const steps = trace || [];
+  if (!els.healingTrace || !els.healingAlert || !els.healingSummary) return;
+  if (!steps.length) {
+    els.healingSummary.textContent = "暂无自愈事件";
+    els.healingAlert.textContent = "等待 SLA 告警";
+    els.healingAlert.className = "healing-alert";
+    els.healingTrace.innerHTML = "";
+    return;
+  }
+  const failed = result?.verification && !result.verification.passed;
+  const warning = result?.verification?.severity === "warning";
+  els.healingSummary.textContent = failed ? "自愈失败" : warning ? "自愈完成（指标临界）" : "自愈完成";
+  els.healingAlert.textContent = failed
+    ? "自愈重试达到上限，未找到可行路径"
+    : warning
+      ? "检测到 SLA 不达标，已自动触发自愈；当前指标接近阈值，持续监控"
+      : "检测到 SLA 不达标，已自动触发自愈流程";
+  els.healingAlert.className = `healing-alert ${failed ? "bad" : warning ? "warn" : "ok"}`;
+  els.healingTrace.innerHTML = steps
+    .map((step) => {
+      const metrics = Object.entries(step.metrics || {})
+        .map(([key, value]) => `<span>${escapeHtml(key)}: ${escapeHtml(value)}</span>`)
+        .join("");
+      const links = (step.links || []).map(escapeHtml).join(" / ");
+      return `
+        <div class="healing-step ${escapeHtml(step.status)}">
+          <b>${step.stage}</b>
+          <div>
+            <strong>${escapeHtml(step.name)}</strong>
+            <p>${escapeHtml(step.detail)}</p>
+            <div class="healing-meta">${metrics}${links ? `<span>${links}</span>` : ""}</div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
 }
 
 function renderIntentSummary(intent) {
@@ -299,7 +344,7 @@ function renderTopology(nodes, links, selectedLinks) {
       const typeLabel = normalizedType === "low_latency_dedicated" ? "低时延专线" : "骨干中转";
       return `
         <div class="link ${typeClass} ${selected} ${link.health}" style="left:${x1}px; top:${y1}px; width:${length}px; transform:rotate(${angle}deg)"></div>
-        <div class="link-label" style="left:${labelX}px; top:${labelY}px">${link.latency_ms}ms / ${link.loss_percent}% <span class="link-type">${typeLabel}</span></div>
+        <div class="link-label" style="left:${labelX}px; top:${labelY}px">${link.latency_ms}ms / ${link.loss_percent}% / ${link.capacity_mbps}M <span class="link-type">${typeLabel}</span></div>
       `;
     })
     .join("");
@@ -385,9 +430,12 @@ async function refresh() {
 async function runAction(label, action, successLabel = "操作完成") {
   try {
     setBusy(true, label);
-    await action();
+    const result = await action();
+    if (result?.active_result) {
+      renderResult(result.active_result);
+    }
     await refresh();
-    els.statusPill.textContent = successLabel;
+    els.statusPill.textContent = result?.healing_triggered ? statusText(result.active_result.status, result.active_result.healed) : successLabel;
   } catch (error) {
     els.statusPill.textContent = "操作失败";
     els.parseNote.textContent = error.message;

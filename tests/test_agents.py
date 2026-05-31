@@ -10,6 +10,9 @@ from app.utils import load_active_result, persist_runtime_state, recent_intents
 from app.llm import load_deepseek_runtime_settings, normalize_deepseek_base_url
 
 
+STRICT_VIDEO_INTENT = "请保障北京园区到上海云服务的视频会议业务，需要低时延链路，30ms 内，丢包小于1%，带宽至少100M。"
+
+
 DEMO_INTENT = "请保障北京园区到上海云服务的视频会议业务，要求时延低于50ms，丢包率低于1%，优先避开拥塞链路。"
 
 
@@ -44,7 +47,24 @@ def test_healing_avoids_degraded_primary_link(monkeypatch, tmp_path):
     assert result.healed
     assert "lnk-tianjin-jinan" not in result.policy.selected_links
     assert result.verification.passed
-    assert "lnk-beijing-jinan-dedicated" in result.policy.selected_links
+    assert "lnk-beijing-shanghai-private" in result.policy.selected_links
+    assert len(result.healing_trace) == 6
+
+
+def test_strict_video_intent_auto_heals_to_private_line(monkeypatch, tmp_path):
+    monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    simulator = NetworkSimulator()
+    orchestrator = Orchestrator(simulator=simulator, registry=AgentRegistry())
+
+    result = orchestrator.submit_intent(STRICT_VIDEO_INTENT)
+
+    assert result.healed
+    assert result.verification.passed
+    assert result.verification.latency_ms == 25
+    assert result.policy.selected_links == ["lnk-beijing-shanghai-private"]
+    assert [step.stage for step in result.healing_trace] == [1, 2, 3, 4, 5, 6]
+    assert result.healing_trace[0].metrics["latency_ms"] == 41
 
 
 def test_failure_is_reported_when_no_path_can_satisfy_sla(monkeypatch, tmp_path):
@@ -53,7 +73,7 @@ def test_failure_is_reported_when_no_path_can_satisfy_sla(monkeypatch, tmp_path)
     simulator = NetworkSimulator()
     orchestrator = Orchestrator(simulator=simulator, registry=AgentRegistry())
     simulator.apply_simulation("fail", "lnk-tianjin-jinan")
-    simulator.apply_simulation("fail", "lnk-beijing-jinan-dedicated")
+    simulator.apply_simulation("fail", "lnk-beijing-shanghai-private")
     simulator.apply_simulation("fail", "lnk-tianjin-guangzhou")
     simulator.apply_simulation("fail", "lnk-tianjin-nanjing")
 
@@ -71,7 +91,7 @@ def test_healing_reports_failed_after_max_retries(monkeypatch, tmp_path):
     orchestrator = Orchestrator(simulator=simulator, registry=AgentRegistry())
     orchestrator.submit_intent(DEMO_INTENT)
     simulator.apply_simulation("fail", "lnk-tianjin-jinan")
-    simulator.apply_simulation("fail", "lnk-beijing-jinan-dedicated")
+    simulator.apply_simulation("fail", "lnk-beijing-shanghai-private")
     simulator.apply_simulation("fail", "lnk-tianjin-guangzhou")
     simulator.apply_simulation("fail", "lnk-tianjin-nanjing")
 
@@ -81,6 +101,37 @@ def test_healing_reports_failed_after_max_retries(monkeypatch, tmp_path):
     assert result.status == "failed"
     assert result.tasks[-1].status == "blocked"
     assert any("retried 3 times" in issue for issue in result.verification.issues)
+
+
+def test_healing_marks_warning_when_recovered_path_is_near_sla(monkeypatch, tmp_path):
+    monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    simulator = NetworkSimulator()
+    simulator.links["lnk-beijing-shanghai-private"].latency_ms = 29
+    simulator.links["lnk-beijing-shanghai-private"].loss_percent = 0.8
+    orchestrator = Orchestrator(simulator=simulator, registry=AgentRegistry())
+
+    result = orchestrator.submit_intent(STRICT_VIDEO_INTENT)
+
+    assert result.healed
+    assert result.verification.passed
+    assert result.verification.severity == "warning"
+
+
+def test_private_line_failure_falls_back_to_transit_path(monkeypatch, tmp_path):
+    monkeypatch.setenv("C4_SETTINGS_DIR", str(tmp_path))
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    simulator = NetworkSimulator()
+    orchestrator = Orchestrator(simulator=simulator, registry=AgentRegistry())
+    orchestrator.submit_intent(STRICT_VIDEO_INTENT)
+    simulator.apply_simulation("fail", "lnk-beijing-shanghai-private")
+
+    result = orchestrator.heal()
+
+    assert result.healed
+    assert result.verification.passed
+    assert "lnk-beijing-shanghai-private" not in result.policy.selected_links
+    assert "lnk-tianjin-nanjing" in result.policy.selected_links
 
 
 def test_deepseek_parser_is_used_when_configured(monkeypatch, tmp_path):
