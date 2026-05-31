@@ -168,10 +168,10 @@ class ReactOrchestrator:
         tasks = self.planner_agent.build_tasks()
         if healing:
             passed = bool(verification and verification.passed)
-            detail = "根据异常遥测避开退化链路并重规划"
+            detail = "根据验证失败或异常遥测避开退化链路并重规划"
             if verification is not None and not passed:
                 detail = f"已重试 {healing_attempts} 次，仍无可行路径"
-            tasks.append(TaskStep(id="T6", agent="Healing Agent", action="replan", status="done" if passed else "blocked", detail=detail))
+            tasks.append(TaskStep(id="T7", agent="Healing Agent", action="replan", status="done" if passed else "blocked", detail=detail))
         return tasks
 
     def _messages(self, text: str, context: NetworkToolContext, graph_backend: str, healing: bool) -> list[A2AMessage]:
@@ -185,7 +185,9 @@ class ReactOrchestrator:
         if context.path_plan is not None:
             bus.send("Path Tool", "Policy Tool", "inform", context.path_plan)
         if context.policy is not None:
-            bus.send("Policy Tool", "Verification Tool", "request", {"policy_id": context.policy.policy_id, "path": context.policy.path})
+            bus.send("Policy Tool", "Network Simulator", "request", {"action": "deploy_policy_dry_run", "policy_id": context.policy.policy_id, "path": context.policy.path})
+            bus.send("Network Simulator", "Verification Tool", "inform", {"policy_id": context.policy.policy_id, "dry_run": context.policy.dry_run})
+            bus.send("Verification Tool", "Telemetry Tool", "request", {"tool": "collect_telemetry_snapshot", "selected_links": context.policy.selected_links})
         if healing:
             bus.send("Telemetry Tool", "Healing Tool", "alert", {"reason": context.healing_reason or "SLA violation or degraded link detected"})
             bus.send("Healing Tool", "Verification Tool", "inform", {"attempts": context.healing_attempts, "passed": bool(context.verification and context.verification.passed)})

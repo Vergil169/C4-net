@@ -185,7 +185,7 @@ function renderResult(result) {
   renderTasks(result.tasks);
   renderMessages(result.messages);
   renderPolicy(result.policy);
-  renderVerification(result.verification);
+  renderVerification(result.verification, result.intent, result.policy);
   renderHealingTrace(result.healing_trace || [], result);
   renderTopology(result.nodes, result.links, result.policy.selected_links);
   els.selectedPath.textContent = result.policy.path.join(" -> ");
@@ -287,22 +287,41 @@ function renderPolicy(policy) {
   `;
 }
 
-function renderVerification(result) {
+function renderVerification(result, intent = null, policy = null) {
   if (!result) {
     els.verification.innerHTML = "";
     return;
   }
   const cls = result.passed ? "ok" : "bad";
   const issues = (result.issues || []).map((issue) => `<code>${escapeHtml(issue)}</code>`).join("");
+  const latencyTarget = intent ? `${intent.max_latency_ms}ms` : "--";
+  const lossTarget = intent ? `${intent.max_loss_percent}%` : "--";
+  const bandwidthTarget = intent ? `${intent.min_bandwidth_mbps}Mbps` : "--";
+  const latencyPassed = intent ? result.latency_ms <= intent.max_latency_ms : result.passed;
+  const lossPassed = intent ? result.loss_percent <= intent.max_loss_percent : result.passed;
+  const bandwidthMargin = result.sla_margin?.bandwidth_mbps;
+  const bandwidthPassed = typeof bandwidthMargin === "number" ? bandwidthMargin >= 0 : result.passed;
+  const bandwidthMeasured = typeof bandwidthMargin === "number" && intent
+    ? `${intent.min_bandwidth_mbps + bandwidthMargin}Mbps`
+    : policy
+      ? `${policy.bandwidth_reservation_mbps}Mbps`
+      : "--";
   els.verification.innerHTML = `
     <div class="metric ${cls}"><span>状态</span><strong>${escapeHtml(result.status)}</strong></div>
     <div class="metric ${cls}"><span>结果</span><strong>${result.passed ? "通过" : "需处理"}</strong></div>
-    <div class="metric"><span>端到端时延</span><strong>${result.latency_ms}ms</strong></div>
-    <div class="metric"><span>丢包率</span><strong>${result.loss_percent}%</strong></div>
-    <div class="metric"><span>瓶颈利用率</span><strong>${result.bottleneck_utilization_percent}%</strong></div>
+    <div class="metric ${latencyPassed ? "ok" : "bad"}"><span>时延 SLA</span><strong>${result.latency_ms}ms ≤ ${latencyTarget}</strong><em>余量 ${formatMargin(result.sla_margin?.latency_ms, "ms")}</em></div>
+    <div class="metric ${lossPassed ? "ok" : "bad"}"><span>丢包 SLA</span><strong>${result.loss_percent}% ≤ ${lossTarget}</strong><em>余量 ${formatMargin(result.sla_margin?.loss_percent, "%")}</em></div>
+    <div class="metric ${bandwidthPassed ? "ok" : "bad"}"><span>带宽 SLA</span><strong>${bandwidthMeasured} ≥ ${bandwidthTarget}</strong><em>余量 ${formatMargin(bandwidthMargin, "Mbps")}</em></div>
+    <div class="metric"><span>瓶颈利用率</span><strong>${result.bottleneck_utilization_percent}%</strong><em>来自当前遥测快照</em></div>
     ${issues ? `<div class="metric wide"><span>问题</span><strong>${issues}</strong></div>` : ""}
     <div class="metric wide"><span>建议</span><strong>${escapeHtml(result.recommendation)}</strong></div>
   `;
+}
+
+function formatMargin(value, unit) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "--";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value}${unit}`;
 }
 
 function renderTelemetry(telemetry) {

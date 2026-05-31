@@ -198,8 +198,9 @@ class PlannerAgent:
             TaskStep(id="T1", agent="Intent Agent", action="parse_intent", status="done", detail="解析自然语言意图与 SLA 约束"),
             TaskStep(id="T2", agent="Topology Agent", action="query_topology", status="done", detail="查询跨域拓扑、节点和链路状态"),
             TaskStep(id="T3", agent="Telemetry Agent", action="collect_metrics", status="done", detail="采集链路时延、丢包、利用率和健康状态"),
-            TaskStep(id="T4", agent="Policy Agent", action="generate_policy", status="done", detail="生成 QoS、ACL、路径和配置预览"),
-            TaskStep(id="T5", agent="Verification Agent", action="verify_sla", status="done", detail="验证 SLA、连通性和策略冲突"),
+            TaskStep(id="T4", agent="Policy Agent", action="generate_policy", status="done", detail="生成路径、QoS、ACL 和配置预览"),
+            TaskStep(id="T5", agent="Policy Agent", action="deploy_policy_dry_run", status="done", detail="模拟策略下发，记录将要生效的路径和配置片段"),
+            TaskStep(id="T6", agent="Verification Agent", action="verify_intent_achievement", status="done", detail="基于遥测结果验证 SLA、连通性和策略冲突"),
         ]
 
     def _detect_graph_backend(self) -> str:
@@ -246,7 +247,7 @@ class Orchestrator:
 
         tasks = self.planner_agent.build_tasks()
         if healing:
-            tasks.append(TaskStep(id="T6", agent="Healing Agent", action="replan", status="done", detail="根据异常遥测避开退化链路并重规划"))
+            tasks.append(TaskStep(id="T7", agent="Healing Agent", action="replan", status="done", detail="根据验证失败或异常遥测避开退化链路并重规划"))
             bus.send("Telemetry Agent", "Healing Agent", "alert", {"reason": "SLA violation or degraded link detected"})
             bus.send("Healing Agent", "Planner Agent", "request", {"action": "replan_with_degraded_links_avoided"})
 
@@ -272,12 +273,14 @@ class Orchestrator:
                 healing_attempts = 0
             else:
                 bus.send("Verification Agent", "Healing Agent", "alert", {"reason": original_verification.issues, "latency_ms": original_verification.latency_ms})
-                tasks.append(TaskStep(id="T6", agent="Healing Agent", action="auto_replan", status="running", detail="检测到 SLA 不达标，自动触发闭环自愈"))
+                tasks.append(TaskStep(id="T7", agent="Healing Agent", action="auto_replan", status="running", detail="验证发现 SLA 未达成，自动触发闭环自愈"))
                 policy, verification, healing_attempts = self.simulator.heal_policy(intent)
                 healing_trace = self.simulator.build_healing_trace(intent, original_policy, original_verification, policy, verification, healing_attempts)
                 tasks[-1].status = "done" if verification.passed else "blocked"
                 tasks[-1].detail = "已自动避开高时延链路，切换至低时延专线" if verification.passed else f"已重试 {healing_attempts} 次，仍无可行路径"
-        bus.send("Policy Agent", "Verification Agent", "request", {"policy_id": policy.policy_id, "path": policy.path})
+        bus.send("Policy Agent", "Network Simulator", "request", {"action": "deploy_policy_dry_run", "policy_id": policy.policy_id, "path": policy.path})
+        bus.send("Network Simulator", "Verification Agent", "inform", {"policy_id": policy.policy_id, "dry_run": policy.dry_run})
+        bus.send("Verification Agent", "Telemetry Agent", "request", {"tool": "mcp.telemetry.snapshot", "selected_links": policy.selected_links})
         if healing:
             bus.send("Healing Agent", "Verification Agent", "inform", {"attempts": healing_attempts, "passed": verification.passed})
             tasks[-1].status = "done" if verification.passed else "blocked"

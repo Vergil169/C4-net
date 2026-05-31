@@ -571,6 +571,14 @@ pre {
   word-break: break-word;
 }
 
+.metric em {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
 .metric.wide {
   grid-column: 1 / -1;
 }
